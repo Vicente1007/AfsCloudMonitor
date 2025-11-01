@@ -11,20 +11,22 @@ import os
 
 app = Flask(__name__)
 
+# === Configuración Ubidots ===
 UBIDOTS_TOKEN = os.getenv("UBIDOTS_TOKEN")
-DEVICE_LABEL = os.getenv("DEVICE_LABEL", "afs_piloto")
+DEVICE_LABEL = os.getenv("DEVICE_LABEL", "AFS_Piloto")
 UBIDOTS_URL = f"https://industrial.api.ubidots.com/api/v2.0/devices/{DEVICE_LABEL}/"
-
 HEADERS = {"X-Auth-Token": UBIDOTS_TOKEN, "Content-Type": "application/json"}
 
+# === Variables disponibles ===
 VARIABLES = [
     "nivel_agua",
     "caudal",
-    "presion",
     "eficiencia",
-    "balance_hidrico"
+    "balance_hidrico",
+    "lluvia"
 ]
 
+# === Función para obtener los últimos valores ===
 def obtener_datos():
     datos = {}
     for var in VARIABLES:
@@ -40,6 +42,7 @@ def obtener_datos():
             datos[var] = None
     return datos
 
+# === Rutas Flask ===
 @app.route('/')
 def index():
     return render_template('dashboard.html')
@@ -51,3 +54,4 @@ def data():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
+
