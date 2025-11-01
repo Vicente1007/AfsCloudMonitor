@@ -1,109 +1,114 @@
-"""
-💧 AFS Cloud Live Monitor – Fase Piloto (Render Free)
-Monitoreo técnico en tiempo real – Aqua Feelings Systems
-Versión 1.1 – Endpoint de simulación habilitado
-"""
 
-from flask import Flask, render_template, jsonify
-import requests
 import os
-import random
+import threading
+import time
+import requests
+from flask import Flask, render_template, jsonify
 
-# ---------------------------
-# 🔧 Configuración inicial
-# ---------------------------
+# ============================================================
+# 🌎 CONFIGURACIÓN GENERAL
+# ============================================================
 
 app = Flask(__name__)
 
-# Variables de entorno configuradas en Render
+# Variables de entorno
 UBIDOTS_TOKEN = os.getenv("UBIDOTS_TOKEN")
 DEVICE_LABEL = os.getenv("DEVICE_LABEL", "afs_piloto")
-UBIDOTS_URL = f"https://industrial.api.ubidots.com/api/v2.0/devices/{DEVICE_LABEL}/"
-HEADERS = {"X-Auth-Token": UBIDOTS_TOKEN, "Content-Type": "application/json"}
+MODE = os.getenv("MODE", "free").lower()  # "free" o "pro"
 
-# Variables monitoreadas (mismo nombre API label en Ubidots)
-VARIABLES = [
-    "nivel_agua",
-    "caudal",
-    "eficiencia",
-    "balance_hidrico",
-    "lluvia"
-]
+UBIDOTS_URL = f"https://industrial.api.ubidots.com/api/v1.6/devices/{DEVICE_LABEL}"
 
-# ---------------------------
-# 🧠 Función para obtener datos reales desde Ubidots
-# ---------------------------
+# ============================================================
+# 🔧 FUNCIONES PRINCIPALES
+# ============================================================
+
 def obtener_datos():
-    datos = {}
-    for var in VARIABLES:
-        try:
-            url = f"{UBIDOTS_URL}{var}/values/?page_size=1"
-            res = requests.get(url, headers=HEADERS, timeout=5)
-            if res.status_code == 200 and res.json().get("results"):
-                valor = res.json()["results"][0]["value"]
-                datos[var] = round(valor, 2)
-            else:
-                datos[var] = None
-        except Exception:
-            datos[var] = None
-    return datos
-
-
-# ---------------------------
-# 🌍 Rutas principales
-# ---------------------------
-
-@app.route('/')
-def index():
-    """Página principal con dashboard."""
-    return render_template('dashboard.html')
-
-
-@app.route('/data')
-def data():
-    """Entrega los valores actuales a la interfaz web."""
-    datos = obtener_datos()
-    return jsonify(datos)
-
-
-# ---------------------------
-# 🧩 Endpoint de simulación (para plan gratuito)
-# ---------------------------
-
-@app.route('/simulate')
-def simulate():
     """
-    Genera lecturas simuladas y las envía a Ubidots.
-    Se puede ejecutar manualmente o con un cron externo cada 1 minuto.
+    Obtiene las últimas lecturas desde Ubidots.
     """
-    payload = {
-        "nivel_agua": round(random.uniform(10, 100), 2),
-        "caudal": round(random.uniform(0.5, 3.5), 2),
-        "eficiencia": round(random.uniform(60, 95), 2),
-        "balance_hidrico": round(random.uniform(-200, 1200), 2),
-        "lluvia": round(random.uniform(0, 5), 2)
-    }
-
     try:
-        res = requests.post(UBIDOTS_URL, headers=HEADERS, json=payload, timeout=5)
-        if res.status_code == 201:
-            return {"status": "ok", "data": payload, "source": "simulate"}
-        else:
-            return {"status": "error", "code": res.status_code, "response": res.text}
+        headers = {"X-Auth-Token": UBIDOTS_TOKEN}
+        response = requests.get(UBIDOTS_URL, headers=headers, timeout=10)
+        data = response.json()
+
+        return {
+            "nivel_agua": round(data.get("nivel_agua", {}).get("value", 0), 2),
+            "caudal": round(data.get("caudal", {}).get("value", 0), 2),
+            "eficiencia": round(data.get("eficiencia", {}).get("value", 0), 2),
+            "balance_hidrico": round(data.get("balance_hidrico", {}).get("value", 0), 2),
+            "lluvia": round(data.get("lluvia", {}).get("value", 0), 2),
+        }
+
     except Exception as e:
-        return {"status": "error", "detail": str(e)}
+        print(f"❌ Error al obtener datos: {e}")
+        return {"nivel_agua": 0, "caudal": 0, "eficiencia": 0, "balance_hidrico": 0, "lluvia": 0}
 
 
-# ---------------------------
-# 🔥 Ejecución local
-# ---------------------------
+def enviar_datos():
+    """
+    Envía datos simulados a Ubidots (solo para modo demostración).
+    """
+    try:
+        payload = {
+            "nivel_agua": round(2 + 3 * time.time() % 10, 2),
+            "caudal": round(1 + 2 * time.time() % 5, 2),
+            "eficiencia": round(75 + (time.time() % 5), 2),
+            "balance_hidrico": round(-120 + (time.time() % 10), 2),
+            "lluvia": round(0.1 + (time.time() % 2) / 10, 2)
+        }
 
-if __name__ == '__main__':
-    # En el plan gratuito NO se usa threading.
-    # Si luego pasas al plan Pro, aquí se puede reactivar la simulación automática:
-    #
-    # import threading
-    # threading.Thread(target=generar_datos, daemon=True).start()
-    #
-    app.run(host='0.0.0.0', port=5000)
+        headers = {
+            "X-Auth-Token": UBIDOTS_TOKEN,
+            "Content-Type": "application/json"
+        }
+
+        requests.post(UBIDOTS_URL, headers=headers, json=payload, timeout=10)
+        print(f"📤 Datos enviados a Ubidots: {payload}")
+
+    except Exception as e:
+        print(f"⚠️ Error al enviar datos: {e}")
+
+
+def ciclo_automatico():
+    """
+    Genera lecturas automáticas cada 60 segundos (modo PRO).
+    """
+    while True:
+        enviar_datos()
+        time.sleep(60)
+
+
+# ============================================================
+# 🌐 ENDPOINTS FLASK
+# ============================================================
+
+@app.route("/")
+def index():
+    return render_template("index.html")
+
+
+@app.route("/data")
+def data():
+    return jsonify(obtener_datos())
+
+
+@app.route("/simulate")
+def simulate():
+    enviar_datos()
+    return jsonify({"status": "ok", "msg": "Datos simulados enviados manualmente."})
+
+
+# ============================================================
+# 🚀 EJECUCIÓN PRINCIPAL
+# ============================================================
+
+if __name__ == "__main__":
+    if MODE == "pro":
+        print("🚀 AFS Cloud Monitor iniciado en modo PRO (automático cada 1 min).")
+        hilo = threading.Thread(target=ciclo_automatico, daemon=True)
+        hilo.start()
+    else:
+        print("⚠️ Modo FREE: ejecuta /simulate manualmente o usa cron-job.org.")
+
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
 
