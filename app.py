@@ -1,41 +1,38 @@
 """
-AFS Cloud Live Monitor – versión autosimulada
-Render actúa como fuente y dashboard a la vez
+💧 AFS Cloud Live Monitor – Fase Piloto (Render Free)
+Monitoreo técnico en tiempo real – Aqua Feelings Systems
+Versión 1.1 – Endpoint de simulación habilitado
 """
 
 from flask import Flask, render_template, jsonify
-import threading, time, requests, os, random
+import requests
+import os
+import random
+
+# ---------------------------
+# 🔧 Configuración inicial
+# ---------------------------
 
 app = Flask(__name__)
 
-# === CONFIGURACIÓN ===
+# Variables de entorno configuradas en Render
 UBIDOTS_TOKEN = os.getenv("UBIDOTS_TOKEN")
 DEVICE_LABEL = os.getenv("DEVICE_LABEL", "afs_piloto")
-UBIDOTS_URL = f"https://industrial.api.ubidots.com/api/v1.6/devices/{DEVICE_LABEL}/"
-
+UBIDOTS_URL = f"https://industrial.api.ubidots.com/api/v2.0/devices/{DEVICE_LABEL}/"
 HEADERS = {"X-Auth-Token": UBIDOTS_TOKEN, "Content-Type": "application/json"}
 
-VARIABLES = ["nivel_agua", "caudal", "eficiencia", "balance_hidrico", "lluvia"]
+# Variables monitoreadas (mismo nombre API label en Ubidots)
+VARIABLES = [
+    "nivel_agua",
+    "caudal",
+    "eficiencia",
+    "balance_hidrico",
+    "lluvia"
+]
 
-# === SIMULADOR DE DATOS ===
-def generar_datos():
-    """Ciclo permanente que genera y envía datos a Ubidots."""
-    while True:
-        try:
-            payload = {
-                "nivel_agua": random.uniform(40, 100),
-                "caudal": random.uniform(0.5, 3.0),
-                "eficiencia": random.uniform(70, 95),
-                "balance_hidrico": random.uniform(200, 1000),
-                "lluvia": random.uniform(0, 5)
-            }
-            res = requests.post(UBIDOTS_URL, headers=HEADERS, json=payload, timeout=5)
-            print(f"[SIMULADOR] Enviados datos: {payload} | Respuesta {res.status_code}")
-        except Exception as e:
-            print("[SIMULADOR] Error:", e)
-        time.sleep(60)  # cada 60 segundos
-
-# === LECTOR DE DATOS PARA DASHBOARD ===
+# ---------------------------
+# 🧠 Función para obtener datos reales desde Ubidots
+# ---------------------------
 def obtener_datos():
     datos = {}
     for var in VARIABLES:
@@ -51,16 +48,62 @@ def obtener_datos():
             datos[var] = None
     return datos
 
+
+# ---------------------------
+# 🌍 Rutas principales
+# ---------------------------
+
 @app.route('/')
 def index():
+    """Página principal con dashboard."""
     return render_template('dashboard.html')
+
 
 @app.route('/data')
 def data():
+    """Entrega los valores actuales a la interfaz web."""
     datos = obtener_datos()
     return jsonify(datos)
 
-# === INICIO AUTOMÁTICO DEL SIMULADOR ===
+
+# ---------------------------
+# 🧩 Endpoint de simulación (para plan gratuito)
+# ---------------------------
+
+@app.route('/simulate')
+def simulate():
+    """
+    Genera lecturas simuladas y las envía a Ubidots.
+    Se puede ejecutar manualmente o con un cron externo cada 1 minuto.
+    """
+    payload = {
+        "nivel_agua": round(random.uniform(10, 100), 2),
+        "caudal": round(random.uniform(0.5, 3.5), 2),
+        "eficiencia": round(random.uniform(60, 95), 2),
+        "balance_hidrico": round(random.uniform(-200, 1200), 2),
+        "lluvia": round(random.uniform(0, 5), 2)
+    }
+
+    try:
+        res = requests.post(UBIDOTS_URL, headers=HEADERS, json=payload, timeout=5)
+        if res.status_code == 201:
+            return {"status": "ok", "data": payload, "source": "simulate"}
+        else:
+            return {"status": "error", "code": res.status_code, "response": res.text}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
+
+# ---------------------------
+# 🔥 Ejecución local
+# ---------------------------
+
 if __name__ == '__main__':
-    threading.Thread(target=generar_datos, daemon=True).start()
+    # En el plan gratuito NO se usa threading.
+    # Si luego pasas al plan Pro, aquí se puede reactivar la simulación automática:
+    #
+    # import threading
+    # threading.Thread(target=generar_datos, daemon=True).start()
+    #
     app.run(host='0.0.0.0', port=5000)
+
