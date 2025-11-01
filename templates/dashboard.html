@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>AFS Cloud Live Monitor</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script>
+    async function actualizarDatos() {
+      const res = await fetch("/data");
+      const datos = await res.json();
+      for (const k in datos) {
+        const el = document.getElementById(k);
+        if (el) el.textContent = datos[k] !== null ? datos[k] : "—";
+      }
+    }
+    setInterval(actualizarDatos, 5000);
+    window.onload = actualizarDatos;
+  </script>
+</head>
+<body>
+  <header>
+    <h1>💧 AFS Cloud Live Monitor</h1>
+    <p>Monitoreo técnico en tiempo real – Aqua Feelings Systems</p>
+  </header>
+
+  <main class="grid">
+    <section class="card"><h2>Nivel de Agua (%)</h2><p id="nivel_agua">—</p></section>
+    <section class="card"><h2>Caudal (L/s)</h2><p id="caudal">—</p></section>
+    <section class="card"><h2>Presión (bar)</h2><p id="presion">—</p></section>
+    <section class="card"><h2>Eficiencia Hídrica (%)</h2><p id="eficiencia">—</p></section>
+    <section class="card"><h2>Balance Hídrico (L)</h2><p id="balance_hidrico">—</p></section>
+  </main>
+
+  <footer>© 2025 Aqua Feelings Systems | AFS Cloud Monitoring</footer>
+</body>
+</html>
