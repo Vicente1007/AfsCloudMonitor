@@ -15,7 +15,7 @@ DEVICE_LABEL = os.getenv("DEVICE_LABEL", "afs_piloto")
 UBIDOTS_URL = f"https://industrial.api.ubidots.com/api/v1.6/devices/{DEVICE_LABEL}"
 
 SIM_INTERVAL = 30  # segundos entre simulaciones
-RUNNING = False    # evita lanzar más de un hilo
+running_thread = False  # para evitar hilos duplicados
 
 
 # ============================================================
@@ -50,22 +50,21 @@ def enviar_datos():
             "balance_hidrico": round(-100 + (time.time() % 50), 2),
             "lluvia": round((time.time() % 2) / 2, 2)
         }
+
         headers = {"X-Auth-Token": UBIDOTS_TOKEN, "Content-Type": "application/json"}
         r = requests.post(UBIDOTS_URL, headers=headers, json=payload, timeout=10)
+
         if r.status_code == 200:
             print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 📤 Datos enviados: {payload}")
         else:
             print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] ⚠️ Error {r.status_code}: {r.text}")
+
     except Exception as e:
         print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] ⚠️ Error al enviar datos: {e}")
 
 
 def ciclo_automatico():
     """Publica datos cada SIM_INTERVAL segundos."""
-    global RUNNING
-    if RUNNING:
-        return
-    RUNNING = True
     print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 🔁 Ciclo automático iniciado ({SIM_INTERVAL}s intervalos)")
     while True:
         enviar_datos()
@@ -78,11 +77,14 @@ def ciclo_automatico():
 
 @app.route("/")
 def index():
+    iniciar_ciclo_pro()
     return render_template("index.html")
+
 
 @app.route("/data")
 def data():
     return jsonify(obtener_datos())
+
 
 @app.route("/simulate")
 def simulate():
@@ -91,14 +93,16 @@ def simulate():
 
 
 # ============================================================
-# 🚀 ARRANQUE AUTOMÁTICO CON GUNICORN
+# 🚀 ARRANQUE AUTOMÁTICO (Flask 3.x compatible)
 # ============================================================
 
-@app.before_first_request
-def iniciar_ciclo():
-    """Se ejecuta automáticamente cuando Flask inicia con Gunicorn."""
-    modo = os.getenv("MODE", "free").lower()
-    if modo == "pro":
+def iniciar_ciclo_pro():
+    """Lanza el hilo automático si está en modo PRO."""
+    global running_thread
+    if running_thread:
+        return
+    if os.getenv("MODE", "free").lower() == "pro":
+        running_thread = True
         print("🚀 AFS Cloud Monitor iniciado en modo PRO (automático cada 30 s).")
         hilo = threading.Thread(target=ciclo_automatico, daemon=True)
         hilo.start()
@@ -107,13 +111,9 @@ def iniciar_ciclo():
 
 
 # ============================================================
-# 🧪 EJECUCIÓN LOCAL (opcional)
+# 🧪 EJECUCIÓN LOCAL (solo para desarrollo)
 # ============================================================
 
 if __name__ == "__main__":
-    iniciar_ciclo()
+    iniciar_ciclo_pro()
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
-
-
-
-
