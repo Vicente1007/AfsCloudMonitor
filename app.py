@@ -1,4 +1,3 @@
-
 import os
 import threading
 import time
@@ -11,21 +10,20 @@ from flask import Flask, render_template, jsonify
 
 app = Flask(__name__)
 
-# Variables de entorno
 UBIDOTS_TOKEN = os.getenv("UBIDOTS_TOKEN")
 DEVICE_LABEL = os.getenv("DEVICE_LABEL", "afs_piloto")
-MODE = os.getenv("MODE", "free").lower()  # "free" o "pro"
-
 UBIDOTS_URL = f"https://industrial.api.ubidots.com/api/v1.6/devices/{DEVICE_LABEL}"
+
+# Intervalo de simulación (segundos)
+SIM_INTERVAL = 30
+
 
 # ============================================================
 # 🔧 FUNCIONES PRINCIPALES
 # ============================================================
 
 def obtener_datos():
-    """
-    Obtiene las últimas lecturas desde Ubidots.
-    """
+    """Obtiene las últimas lecturas desde Ubidots."""
     try:
         headers = {"X-Auth-Token": UBIDOTS_TOKEN}
         response = requests.get(UBIDOTS_URL, headers=headers, timeout=10)
@@ -40,21 +38,19 @@ def obtener_datos():
         }
 
     except Exception as e:
-        print(f"❌ Error al obtener datos: {e}")
+        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] ❌ Error al obtener datos: {e}")
         return {"nivel_agua": 0, "caudal": 0, "eficiencia": 0, "balance_hidrico": 0, "lluvia": 0}
 
 
 def enviar_datos():
-    """
-    Envía datos simulados a Ubidots (solo para modo demostración).
-    """
+    """Envía datos simulados a Ubidots (modo automático)."""
     try:
         payload = {
-            "nivel_agua": round(2 + 3 * time.time() % 10, 2),
-            "caudal": round(1 + 2 * time.time() % 5, 2),
-            "eficiencia": round(75 + (time.time() % 5), 2),
-            "balance_hidrico": round(-120 + (time.time() % 10), 2),
-            "lluvia": round(0.1 + (time.time() % 2) / 10, 2)
+            "nivel_agua": round(0.5 + (time.time() % 2.5), 2),
+            "caudal": round(0.2 + (time.time() % 1.5), 2),
+            "eficiencia": round(75 + (time.time() % 20), 2),
+            "balance_hidrico": round(-100 + (time.time() % 50), 2),
+            "lluvia": round((time.time() % 2) / 2, 2)
         }
 
         headers = {
@@ -62,20 +58,23 @@ def enviar_datos():
             "Content-Type": "application/json"
         }
 
-        requests.post(UBIDOTS_URL, headers=headers, json=payload, timeout=10)
-        print(f"📤 Datos enviados a Ubidots: {payload}")
+        response = requests.post(UBIDOTS_URL, headers=headers, json=payload, timeout=10)
+
+        if response.status_code == 200:
+            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 📤 Datos enviados: {payload}")
+        else:
+            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] ⚠️ Error {response.status_code} al enviar: {response.text}")
 
     except Exception as e:
-        print(f"⚠️ Error al enviar datos: {e}")
+        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] ⚠️ Error al enviar datos: {e}")
 
 
 def ciclo_automatico():
-    """
-    Genera lecturas automáticas cada 60 segundos (modo PRO).
-    """
+    """Envío continuo cada X segundos."""
+    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 🔁 Ciclo automático iniciado ({SIM_INTERVAL}s intervalos)")
     while True:
         enviar_datos()
-        time.sleep(60)
+        time.sleep(SIM_INTERVAL)
 
 
 # ============================================================
@@ -86,11 +85,9 @@ def ciclo_automatico():
 def index():
     return render_template("index.html")
 
-
 @app.route("/data")
 def data():
     return jsonify(obtener_datos())
-
 
 @app.route("/simulate")
 def simulate():
@@ -103,12 +100,9 @@ def simulate():
 # ============================================================
 
 if __name__ == "__main__":
-    if MODE == "pro":
-        print("🚀 AFS Cloud Monitor iniciado en modo PRO (automático cada 1 min).")
-        hilo = threading.Thread(target=ciclo_automatico, daemon=True)
-        hilo.start()
-    else:
-        print("⚠️ Modo FREE: ejecuta /simulate manualmente o usa cron-job.org.")
-
+    print("🚀 AFS Cloud Monitor iniciado en modo PRO (automático cada 30 s).")
+    hilo = threading.Thread(target=ciclo_automatico, daemon=True)
+    hilo.start()
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
+
 
