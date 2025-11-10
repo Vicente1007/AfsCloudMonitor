@@ -1,119 +1,60 @@
 import os
-import threading
-import time
 import requests
-from flask import Flask, render_template, jsonify
-
-# ============================================================
-# 🌎 CONFIGURACIÓN GENERAL
-# ============================================================
+from flask import Flask, jsonify, render_template
+from flask_cors import CORS
+from datetime import datetime
 
 app = Flask(__name__)
+CORS(app)  # ✅ Permite que el HTML acceda a /data sin bloqueo CORS
 
+# Variables de entorno
 UBIDOTS_TOKEN = os.getenv("UBIDOTS_TOKEN")
 DEVICE_LABEL = os.getenv("DEVICE_LABEL", "afs_piloto")
+
 UBIDOTS_URL = f"https://industrial.api.ubidots.com/api/v1.6/devices/{DEVICE_LABEL}"
-
-SIM_INTERVAL = 30  # segundos entre simulaciones
-running_thread = False  # para evitar hilos duplicados
-
-
-# ============================================================
-# 🔧 FUNCIONES PRINCIPALES
-# ============================================================
-
-def obtener_datos():
-    """Obtiene las últimas lecturas desde Ubidots."""
-    try:
-        headers = {"X-Auth-Token": UBIDOTS_TOKEN}
-        r = requests.get(UBIDOTS_URL, headers=headers, timeout=10)
-        d = r.json()
-        return {
-            "nivel_agua": round(d.get("nivel_agua", {}).get("value", 0), 2),
-            "caudal": round(d.get("caudal", {}).get("value", 0), 2),
-            "eficiencia": round(d.get("eficiencia", {}).get("value", 0), 2),
-            "balance_hidrico": round(d.get("balance_hidrico", {}).get("value", 0), 2),
-            "lluvia": round(d.get("lluvia", {}).get("value", 0), 2),
-        }
-    except Exception as e:
-        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] ❌ Error al obtener datos: {e}")
-        return {"nivel_agua": 0, "caudal": 0, "eficiencia": 0, "balance_hidrico": 0, "lluvia": 0}
-
-
-def enviar_datos():
-    """Envía datos simulados a Ubidots."""
-    try:
-        payload = {
-            "nivel_agua": round(0.5 + (time.time() % 2.5), 2),
-            "caudal": round(0.2 + (time.time() % 1.5), 2),
-            "eficiencia": round(75 + (time.time() % 20), 2),
-            "balance_hidrico": round(-100 + (time.time() % 50), 2),
-            "lluvia": round((time.time() % 2) / 2, 2)
-        }
-
-        headers = {"X-Auth-Token": UBIDOTS_TOKEN, "Content-Type": "application/json"}
-        r = requests.post(UBIDOTS_URL, headers=headers, json=payload, timeout=10)
-
-        if r.status_code == 200:
-            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 📤 Datos enviados: {payload}")
-        else:
-            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] ⚠️ Error {r.status_code}: {r.text}")
-
-    except Exception as e:
-        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] ⚠️ Error al enviar datos: {e}")
-
-
-def ciclo_automatico():
-    """Publica datos cada SIM_INTERVAL segundos."""
-    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 🔁 Ciclo automático iniciado ({SIM_INTERVAL}s intervalos)")
-    while True:
-        enviar_datos()
-        time.sleep(SIM_INTERVAL)
-
-
-# ============================================================
-# 🌐 ENDPOINTS FLASK
-# ============================================================
 
 @app.route("/")
 def index():
-    iniciar_ciclo_pro()
     return render_template("index.html")
 
-
 @app.route("/data")
-def data():
-    return jsonify(obtener_datos())
+def get_data():
+    """Obtiene los datos de Ubidots y los entrega al dashboard visual."""
+    headers = {"X-Auth-Token": UBIDOTS_TOKEN, "Content-Type": "application/json"}
 
+    try:
+        response = requests.get(UBIDOTS_URL, headers=headers, timeout=10)
 
-@app.route("/simulate")
-def simulate():
-    enviar_datos()
-    return jsonify({"status": "ok", "msg": "Datos simulados enviados manualmente."})
+        if response.status_code != 200:
+            print(f"[{datetime.now()}] ⚠️ Error Ubidots {response.status_code}: {response.text}")
+            return jsonify({
+                "nivel_agua": 0, "caudal": 0, "eficiencia": 0,
+                "balance_hidrico": 0, "lluvia": 0
+            })
 
+        data = response.json()
 
-# ============================================================
-# 🚀 ARRANQUE AUTOMÁTICO (Flask 3.x compatible)
-# ============================================================
+        # Mapea las variables del dispositivo
+        result = {
+            "nivel_agua": data.get("nivel_agua", {}).get("value", 0),
+            "caudal": data.get("caudal", {}).get("value", 0),
+            "eficiencia": data.get("eficiencia", {}).get("value", 0),
+            "balance_hidrico": data.get("balance_hidrico", {}).get("value", 0),
+            "lluvia": data.get("lluvia", {}).get("value", 0)
+        }
 
-def iniciar_ciclo_pro():
-    """Lanza el hilo automático si está en modo PRO."""
-    global running_thread
-    if running_thread:
-        return
-    if os.getenv("MODE", "free").lower() == "pro":
-        running_thread = True
-        print("🚀 AFS Cloud Monitor iniciado en modo PRO (automático cada 30 s).")
-        hilo = threading.Thread(target=ciclo_automatico, daemon=True)
-        hilo.start()
-    else:
-        print("⚠️ Modo FREE: ejecuta /simulate manualmente o usa cron-job.org.")
+        print(f"[{datetime.now()}] ✅ Datos enviados a /data → {result}")
+        return jsonify(result)
 
-
-# ============================================================
-# 🧪 EJECUCIÓN LOCAL (solo para desarrollo)
-# ============================================================
+    except Exception as e:
+        print(f"[{datetime.now()}] ❌ Error general: {e}")
+        return jsonify({
+            "nivel_agua": 0, "caudal": 0, "eficiencia": 0,
+            "balance_hidrico": 0, "lluvia": 0
+        })
 
 if __name__ == "__main__":
-    iniciar_ciclo_pro()
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
+    port = int(os.getenv("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
+
+    
