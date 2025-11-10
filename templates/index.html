@@ -4,150 +4,118 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>💧 AFS Cloud Monitor Visual</title>
-
-  <!-- Chart.js para los medidores -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
   <style>
     body {
-      margin: 0;
-      font-family: 'Montserrat', sans-serif;
-      background: linear-gradient(180deg, #1e88e5 0%, #64b5f6 100%);
+      font-family: "Montserrat", sans-serif;
+      background: linear-gradient(180deg, #1e88e5, #64b5f6);
       color: #0d47a1;
       text-align: center;
-    }
-    header {
-      background: rgba(255,255,255,0.1);
-      padding: 1em 0;
-      color: #fff;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+      margin: 0;
+      padding: 0;
     }
     h1 {
-      margin: 0;
-      font-size: 1.8em;
-      letter-spacing: 0.5px;
+      color: white;
+      margin-top: 25px;
+      font-weight: 700;
     }
-    .status {
-      font-size: 0.9em;
-      margin-top: 4px;
-      color: #fff;
-      opacity: 0.8;
-    }
-    .status span {
+    #estadoIoT {
       font-weight: 600;
+      margin-bottom: 20px;
+      color: white;
     }
-
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: 1.5rem;
-      padding: 2rem;
-      max-width: 1200px;
-      margin: auto;
+    .panel {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 20px;
+      margin-bottom: 40px;
     }
-
     .card {
-      background: #ffffff;
-      border-radius: 18px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-      padding: 1.5rem;
-      position: relative;
-      transition: transform .2s;
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 6px 10px rgba(0,0,0,0.15);
+      width: 280px;
+      padding: 15px;
+      transition: 0.3s;
     }
-    .card:hover { transform: scale(1.03); }
-
-    .title {
-      font-weight: 600;
+    .card:hover {
+      transform: scale(1.02);
+    }
+    canvas {
+      width: 220px !important;
+      height: 120px !important;
+    }
+    .valor {
+      font-size: 1.6em;
+      font-weight: 700;
       color: #1565c0;
-      margin-bottom: .5rem;
-    }
-    .value {
-      font-size: 2rem;
-      color: #1e88e5;
-      font-weight: bold;
-      margin-bottom: .5rem;
-    }
-
-    footer {
-      background: rgba(255,255,255,0.1);
-      color: #fff;
-      font-size: 0.9em;
-      padding: 1rem;
-      margin-top: 1rem;
     }
   </style>
 </head>
 
 <body>
-  <header>
-    <h1>💧 AFS Cloud Monitor Visual</h1>
-    <div class="status">Estado IoT: <span id="estadoIoT">🟡 Conectando...</span></div>
-  </header>
+  <h1>💧 AFS Cloud Monitor Visual</h1>
+  <div id="estadoIoT">🕓 Conectando...</div>
 
-  <main class="grid">
+  <div class="panel">
     <div class="card">
-      <div class="title">Nivel de Agua (%)</div>
-      <canvas id="nivelGauge"></canvas>
-      <div class="value" id="nivelValor">--</div>
+      <h3>Nivel de Agua (%)</h3>
+      <canvas id="nivel"></canvas>
+      <div class="valor" id="nivelValor">0.00</div>
     </div>
-
     <div class="card">
-      <div class="title">Caudal (L/s)</div>
-      <canvas id="caudalGauge"></canvas>
-      <div class="value" id="caudalValor">--</div>
+      <h3>Caudal (L/s)</h3>
+      <canvas id="caudal"></canvas>
+      <div class="valor" id="caudalValor">0.00</div>
     </div>
-
     <div class="card">
-      <div class="title">Eficiencia Hídrica (%)</div>
-      <canvas id="eficienciaGauge"></canvas>
-      <div class="value" id="eficienciaValor">--</div>
+      <h3>Eficiencia Hídrica (%)</h3>
+      <canvas id="eficiencia"></canvas>
+      <div class="valor" id="eficienciaValor">0.00</div>
     </div>
-
     <div class="card">
-      <div class="title">Balance Hídrico (L)</div>
-      <canvas id="balanceGauge"></canvas>
-      <div class="value" id="balanceValor">--</div>
+      <h3>Balance Hídrico (L)</h3>
+      <canvas id="balance"></canvas>
+      <div class="valor" id="balanceValor">0.00</div>
     </div>
-
     <div class="card">
-      <div class="title">Lluvia (mm/h)</div>
-      <canvas id="lluviaGauge"></canvas>
-      <div class="value" id="lluviaValor">--</div>
+      <h3>Lluvia (mm/h)</h3>
+      <canvas id="lluvia"></canvas>
+      <div class="valor" id="lluviaValor">0.00</div>
     </div>
-  </main>
-
-  <footer>
-    © 2025 Aqua Feelings Systems | AFS Cloud Monitoring PRO
-  </footer>
+  </div>
 
   <script>
-    // ======== CONFIGURACIÓN GAUGES ======== //
-    const crearGauge = (ctx, color) => new Chart(ctx, {
-      type: 'doughnut',
-      data: { datasets: [{
-        data: [0, 100],
-        backgroundColor: [color, '#e0e0e0'],
-        borderWidth: 0,
-        cutout: '75%'
-      }]},
-      options: {
-        plugins: { tooltip: {enabled: false}, legend: {display: false} },
-        rotation: -90,
-        circumference: 180,
-      }
+    // Configurar medidores semicirculares
+    const gaugeConfig = (color) => ({
+      type: "doughnut",
+      data: {
+        datasets: [{
+          data: [0, 100],
+          backgroundColor: [color, "#e0e0e0"],
+          borderWidth: 0,
+          cutout: "80%",
+          rotation: -90,
+          circumference: 180
+        }]
+      },
+      options: { plugins: { tooltip: { enabled: false }, legend: { display: false } } }
     });
 
     const gauges = {
-      nivel: crearGauge(document.getElementById("nivelGauge"), '#42a5f5'),
-      caudal: crearGauge(document.getElementById("caudalGauge"), '#66bb6a'),
-      eficiencia: crearGauge(document.getElementById("eficienciaGauge"), '#ffa726'),
-      balance: crearGauge(document.getElementById("balanceGauge"), '#26c6da'),
-      lluvia: crearGauge(document.getElementById("lluviaGauge"), '#ab47bc'),
+      nivel: new Chart(document.getElementById("nivel"), gaugeConfig("#1565c0")),
+      caudal: new Chart(document.getElementById("caudal"), gaugeConfig("#42a5f5")),
+      eficiencia: new Chart(document.getElementById("eficiencia"), gaugeConfig("#00bfa5")),
+      balance: new Chart(document.getElementById("balance"), gaugeConfig("#5e35b1")),
+      lluvia: new Chart(document.getElementById("lluvia"), gaugeConfig("#0288d1"))
     };
 
     async function actualizarDatos() {
       try {
-        const res = await fetch("/data");
+        const res = await fetch("https://afscloudmonitor.onrender.com/data", {
+          cache: "no-store"
+        });
         const d = await res.json();
         document.getElementById("estadoIoT").innerHTML = "🟢 Conectado";
 
@@ -159,7 +127,7 @@
           lluvia: d.lluvia ?? 0
         };
 
-        Object.entries(datos).forEach(([k,v]) => {
+        Object.entries(datos).forEach(([k, v]) => {
           const gauge = gauges[k];
           if (gauge) {
             gauge.data.datasets[0].data[0] = Math.min(v, 100);
@@ -169,14 +137,17 @@
           const val = document.getElementById(`${k}Valor`);
           if (val) val.textContent = v.toFixed(2);
         });
+
       } catch (err) {
         console.error("Error al obtener datos:", err);
         document.getElementById("estadoIoT").innerHTML = "🔴 Desconectado";
       }
     }
 
-    actualizarDatos();
+    // Ejecutar cada 5 segundos
     setInterval(actualizarDatos, 5000);
+    actualizarDatos();
   </script>
 </body>
 </html>
+
